@@ -6,6 +6,7 @@ const connectDB = require('./config/db');
 const authRoutes = require('./routes/auth');
 const eventRoutes = require('./routes/events');
 const webhookRoutes = require('./routes/webhook');
+const statusHTML = require('./statusHTML');
 
 const app = express();
 
@@ -15,6 +16,11 @@ connectDB();
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Add root route handler
+app.get('/', (req, res) => {
+  res.send(statusHTML);
+});
 
 // Routes
 app.use('/api/auth', authRoutes);
