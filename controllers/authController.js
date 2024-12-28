@@ -1,6 +1,6 @@
 // server/controllers/authController.js
-const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
+const { OAuth2Client } = require('google-auth-library');
 const jwt = require('jsonwebtoken');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -18,14 +18,16 @@ exports.googleAuth = async (req, res) => {
     let user = await User.findOne({ googleId });
 
     if (!user) {
+      // For new users
       user = new User({
         googleId,
         email,
         accessToken: tokenId,
-        refreshToken: req.body.refreshToken
+        // Don't set refreshToken initially
       });
       await user.save();
     } else {
+      // For existing users
       user.accessToken = tokenId;
       if (req.body.refreshToken) {
         user.refreshToken = req.body.refreshToken;
@@ -39,28 +41,40 @@ exports.googleAuth = async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    res.json({ token, user: { _id: user._id, email: user.email } });
+    res.json({ 
+      token, 
+      user: { 
+        _id: user._id, 
+        email: user.email 
+      } 
+    });
   } catch (error) {
     console.error('Auth error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
+    res.status(500).json({ 
+      error: 'Authentication failed',
+      details: error.message 
+    });
   }
 };
 
+// Add a separate endpoint to update refresh token
 exports.refreshToken = async (req, res) => {
   try {
-    const { userId } = req.body;
+    const { userId } = req.params;
+    const { refreshToken } = req.body;
+
     const user = await User.findById(userId);
-    
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Implement Google token refresh logic here
-    // Use refresh token to get new access token
+    user.refreshToken = refreshToken;
+    await user.save();
 
-    res.json({ success: true });
+    res.json({ message: 'Refresh token updated successfully' });
   } catch (error) {
-    res.status(500).json({ error: 'Token refresh failed' });
+    console.error('Update refresh token error:', error);
+    res.status(500).json({ error: 'Failed to update refresh token' });
   }
 };
 
