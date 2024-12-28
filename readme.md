@@ -40,38 +40,52 @@ GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
 FRONTEND_URL=your_frontend_url
 SERVER_URL=your_server_url
+```
 Installation
 Clone the repository:
-bash
-Copy Code
+```
 git clone https://github.com/yourusername/google-calendar-server.git
 cd google-calendar-server
+```
 Install dependencies:
-bash
-Copy Code
+```
 npm install
+```
 Start the server:
-bash
-Copy Code
+```
 # Development mode
 npm run dev
 
 # Production mode
 npm start
-API Endpoints
+
+```
+
+*API Endpoints*
+
+
 Authentication
+
 POST /api/auth/google - Google OAuth authentication
 POST /api/auth/refresh-token - Refresh access token
 POST /api/auth/logout - User logout
+
+
 Events
+
 GET /api/events/:userId - Get user's events
 POST /api/events - Create new event
 PUT /api/events/:eventId - Update existing event
 DELETE /api/events/:eventId - Delete event
+
+
 Webhooks
+
 POST /api/webhook/calendar - Handle calendar notifications
 POST /api/webhook/setup - Setup webhook for user
 POST /api/webhook/stop - Stop webhook notifications
+
+```
 Project Structure
 ├── config/
 │   └── db.js
@@ -94,59 +108,58 @@ Project Structure
 ├── .gitignore
 ├── package.json
 └── server.js
+```
+
 Google Calendar Integration
-Create a project in Google Cloud Console
-Enable Google Calendar API
-Configure OAuth2 consent screen
-Create OAuth2 credentials
-Add authorized redirect URIs
-Update environment variables with credentials
+```
+1.Create a project in Google Cloud Console
+2.Enable Google Calendar API
+3.Configure OAuth2 consent screen
+4.Create OAuth2 credentials
+5.Add authorized redirect URIs
+6.Update environment variables with credentials
+```
+
 Webhook Setup
+```
 The server supports real-time calendar synchronization through webhooks:
 
-Webhook notifications are received at /api/webhook/calendar
-Setup webhook for a user using /api/webhook/setup
-Webhook automatically syncs calendar changes
-Stop webhook notifications using /api/webhook/stop
+1.Webhook notifications are received at /api/webhook/calendar
+2.Setup webhook for a user using /api/webhook/setup
+3.Webhook automatically syncs calendar changes
+4.Stop webhook notifications using /api/webhook/stop
+
+
 Error Handling
+```
 The server implements comprehensive error handling:
 
-Authentication errors
-API request validation
-Google Calendar API errors
-Database operation errors
+1.Authentication errors
+2.API request validation
+3.Google Calendar API errors
+4.Database operation errors
+```
 Security Features
-JWT-based authentication
-OAuth2 token management
-Request validation
-CORS configuration
-Environment variable protection
+```
+1.JWT-based authentication
+2.OAuth2 token management
+3.Request validation
+4.CORS configuration
+5.Environment variable protection
+```
 Development
-bash
-Copy Code
+```
 # Run in development mode
 npm run dev
 
 # Run in production mode
 npm start
-Deployment
-The server can be deployed to various platforms:
+````
 
-Traditional Hosting:
-Install Node.js
-Setup MongoDB
-Configure environment variables
-Run npm start
-Docker:
-Build image: docker build -t google-calendar-server .
-Run container: docker run -p 5000:5000 google-calendar-server
-Cloud Platforms:
-Deploy to Heroku, AWS, or Google Cloud
-Configure environment variables
-Setup MongoDB connection
 Contributing
+```
 Fork the repository
-Create your feature branch (git checkout -b feature/AmazingFeature)
-Commit your changes (git commit -m 'Add some AmazingFeature')
-Push to the branch (git push origin feature/AmazingFeature)
-
+1.Create your feature branch (git checkout -b feature/AmazingFeature)
+2.Commit your changes (git commit -m 'Add some AmazingFeature')
+3.Push to the branch (git push origin feature/AmazingFeature)
+```
