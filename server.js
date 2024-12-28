@@ -6,7 +6,7 @@ const connectDB = require('./config/db');
 const authRoutes = require('./routes/auth');
 const eventRoutes = require('./routes/events');
 const webhookRoutes = require('./routes/webhook');
-const statusHTML = require('./statusHTML');
+const { statusHTML } = require('./statusHTML');
 
 const app = express();
 
