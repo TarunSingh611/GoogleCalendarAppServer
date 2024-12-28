@@ -8,73 +8,112 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 exports.googleAuth = async (req, res) => {
   try {
     const { tokenId } = req.body;
-    const ticket = await client.verifyIdToken({
-      idToken: tokenId,
-      audience: process.env.GOOGLE_CLIENT_ID
-    });
-
-    const { sub: googleId, email } = ticket.getPayload();
-
-    let user = await User.findOne({ googleId });
-
-    if (!user) {
-      // For new users
-      user = new User({
-        googleId,
-        email,
-        accessToken: tokenId,
-        // Don't set refreshToken initially
+      const ticket = await client.verifyIdToken({
+          idToken: tokenId,
+          audience: process.env.GOOGLE_CLIENT_ID
       });
-      await user.save();
-    } else {
+
+      const { sub: googleId, email } = ticket.getPayload();
+
+      let user = await User.findOne({ googleId });
+
+      if (!user) {
+          // Create new user
+          user = new User({
+              googleId,
+              email,
+              accessToken: tokenId,
+        // Don't set refreshToken initially
+          });
+      } else {
       // For existing users
       user.accessToken = tokenId;
       if (req.body.refreshToken) {
         user.refreshToken = req.body.refreshToken;
+          }
       }
+
       await user.save();
-    }
 
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+      // Generate JWT
+      const token = jwt.sign(
+          { userId: user._id },
+          process.env.JWT_SECRET,
+          { expiresIn: '24h' }
+      );
 
-    res.json({ 
-      token, 
-      user: { 
-        _id: user._id, 
-        email: user.email 
-      } 
-    });
+      res.json({
+          token,
+          user: {
+              _id: user._id,
+              email: user.email
+          }
+      });
   } catch (error) {
-    console.error('Auth error:', error);
-    res.status(500).json({ 
-      error: 'Authentication failed',
-      details: error.message 
-    });
+      console.error('Auth error:', error);
+      res.status(500).json({
+          error: 'Authentication failed',
+          details: error.message
+      });
   }
 };
-
 // Add a separate endpoint to update refresh token
 exports.refreshToken = async (req, res) => {
   try {
     const { userId } = req.params;
     const { refreshToken } = req.body;
 
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    // Validate inputs
+    if (!userId || !refreshToken) {
+      return res.status(400).json({ 
+        error: 'Missing required parameters',
+        details: 'User ID and refresh token are required'
+      });
     }
 
-    user.refreshToken = refreshToken;
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ 
+        error: 'User not found' 
+      });
+    }
+
+    // Verify refresh token matches
+    if (user.refreshToken !== refreshToken) {
+      return res.status(401).json({ 
+        error: 'Invalid refresh token' 
+      });
+    }
+
+    // Generate new access token
+    const newAccessToken = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    // Generate new refresh token
+    const newRefreshToken = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    // Update user's refresh token
+    user.refreshToken = newRefreshToken;
     await user.save();
 
-    res.json({ message: 'Refresh token updated successfully' });
+    res.json({
+      token: newAccessToken,
+      refreshToken: newRefreshToken
+    });
   } catch (error) {
-    console.error('Update refresh token error:', error);
-    res.status(500).json({ error: 'Failed to update refresh token' });
+    console.error('Refresh token error:', error);
+    res.status(500).json({
+      error: 'Failed to refresh token',
+      details: error.message
+    });
   }
 };
 

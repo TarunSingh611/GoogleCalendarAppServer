@@ -16,6 +16,10 @@ const eventSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  description: {
+    type: String,
+    default: ''
+  },
   startDateTime: {
     type: Date,
     required: true
@@ -24,6 +28,6 @@ const eventSchema = new mongoose.Schema({
     type: Date,
     required: true
   }
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Event', eventSchema);
