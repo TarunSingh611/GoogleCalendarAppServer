@@ -128,7 +128,7 @@ The server supports real-time calendar synchronization through webhooks:
 2.Setup webhook for a user using /api/webhook/setup
 3.Webhook automatically syncs calendar changes
 4.Stop webhook notifications using /api/webhook/stop
-
+```
 
 Error Handling
 ```
@@ -154,7 +154,7 @@ npm run dev
 
 # Run in production mode
 npm start
-````
+```
 
 Contributing
 ```
