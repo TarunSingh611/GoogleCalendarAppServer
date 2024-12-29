@@ -1,19 +1,28 @@
 // server/controllers/authController.js
 const User = require('../models/User');
-const { OAuth2Client } = require('google-auth-library');
+const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
+const googleCalendarService = require('../services/googleCalendar');
+const { exchangeCodeForTokens } = require('../services/getTokens.js');
 
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET
+);
 
 exports.googleAuth = async (req, res) => {
   try {
-    const { tokenId } = req.body;
+    const { code } = req.body;
+    const tokenPayload = await exchangeCodeForTokens(code);
+    const { id_token: tokenId, access_token, refresh_token } = tokenPayload;
+
       const ticket = await client.verifyIdToken({
           idToken: tokenId,
           audience: process.env.GOOGLE_CLIENT_ID
       });
 
-      const { sub: googleId, email } = ticket.getPayload();
+      const ticketPayload = ticket.getPayload();
+      const { sub: googleId, email } = ticketPayload;
 
       let user = await User.findOne({ googleId });
 
@@ -22,15 +31,13 @@ exports.googleAuth = async (req, res) => {
           user = new User({
               googleId,
               email,
-              accessToken: tokenId,
-        // Don't set refreshToken initially
+              accessToken: access_token,
+              refreshToken: refresh_token
           });
       } else {
       // For existing users
-      user.accessToken = tokenId;
-      if (req.body.refreshToken) {
-        user.refreshToken = req.body.refreshToken;
-          }
+      user.accessToken = access_token;
+      user.refreshToken = refresh_token;
       }
 
       await user.save();

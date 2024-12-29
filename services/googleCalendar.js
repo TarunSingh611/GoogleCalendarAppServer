@@ -48,7 +48,7 @@ class GoogleCalendarService {
                 throw new Error('User not found');
             }
 
-            if (!user.accessToken || !user.refreshToken) {
+            if (!user.accessToken) {
                 throw new Error('User not properly authenticated with Google Calendar');
             }
 
@@ -87,31 +87,31 @@ class GoogleCalendarService {
                     endDateTime: response.data.end.dateTime
                 };
             } catch (error) {
-                if (error.response?.status === 401) {
-                    // Token expired, try refreshing
-                    console.log('Refreshing expired token...');
-                    const newAccessToken = await this.refreshAccessToken(user);
+                // if (error.response?.status === 401) {
+                //     // Token expired, try refreshing
+                //     console.log('Refreshing expired token...');
+                //     const newAccessToken = await this.refreshAccessToken(user);
                     
-                    // Update credentials with new token
-                    this.oauth2Client.setCredentials({
-                        access_token: newAccessToken,
-                        refresh_token: user.refreshToken
-                    });
+                //     // Update credentials with new token
+                //     this.oauth2Client.setCredentials({
+                //         access_token: newAccessToken,
+                //         refresh_token: user.refreshToken
+                //     });
 
-                    // Retry the request
-                    const retryResponse = await calendar.events.insert({
-                        calendarId: 'primary',
-                        requestBody: event
-                    });
+                //     // Retry the request
+                //     const retryResponse = await calendar.events.insert({
+                //         calendarId: 'primary',
+                //         requestBody: event
+                //     });
 
-                    return {
-                        googleEventId: retryResponse.data.id,
-                        title: retryResponse.data.summary,
-                        description: retryResponse.data.description || '',
-                        startDateTime: retryResponse.data.start.dateTime,
-                        endDateTime: retryResponse.data.end.dateTime
-                    };
-                }
+                //     return {
+                //         googleEventId: retryResponse.data.id,
+                //         title: retryResponse.data.summary,
+                //         description: retryResponse.data.description || '',
+                //         startDateTime: retryResponse.data.start.dateTime,
+                //         endDateTime: retryResponse.data.end.dateTime
+                //     };
+                // }
                 throw error;
             }
         } catch (error) {
