@@ -87,36 +87,170 @@ class GoogleCalendarService {
                     endDateTime: response.data.end.dateTime
                 };
             } catch (error) {
-                // if (error.response?.status === 401) {
-                //     // Token expired, try refreshing
-                //     console.log('Refreshing expired token...');
-                //     const newAccessToken = await this.refreshAccessToken(user);
+                if (error.response?.status === 401) {
+                    // Token expired, try refreshing
+                    console.log('Refreshing expired token...');
+                    const newAccessToken = await this.refreshAccessToken(user);
 
-                //     // Update credentials with new token
-                //     this.oauth2Client.setCredentials({
-                //         access_token: newAccessToken,
-                //         refresh_token: user.refreshToken
-                //     });
+                    // Update credentials with new token
+                    this.oauth2Client.setCredentials({
+                        access_token: newAccessToken,
+                        refresh_token: user.refreshToken
+                    });
 
-                //     // Retry the request
-                //     const retryResponse = await calendar.events.insert({
-                //         calendarId: 'primary',
-                //         requestBody: event
-                //     });
+                    // Retry the request
+                    const retryResponse = await calendar.events.insert({
+                        calendarId: 'primary',
+                        requestBody: event
+                    });
 
-                //     return {
-                //         googleEventId: retryResponse.data.id,
-                //         title: retryResponse.data.summary,
-                //         description: retryResponse.data.description || '',
-                //         startDateTime: retryResponse.data.start.dateTime,
-                //         endDateTime: retryResponse.data.end.dateTime
-                //     };
-                // }
+                    return {
+                        googleEventId: retryResponse.data.id,
+                        title: retryResponse.data.summary,
+                        description: retryResponse.data.description || '',
+                        startDateTime: retryResponse.data.start.dateTime,
+                        endDateTime: retryResponse.data.end.dateTime
+                    };
+                }
                 throw error;
             }
         } catch (error) {
             console.error('Google Calendar create event error:', error);
             throw new Error(`Failed to create event in Google Calendar: ${error.message}`);
+        }
+    }
+
+    async updateEvent(userId, eventId, updateData) {
+        try {
+            const user = await User.findById(userId);
+            if (!user) {
+                throw new Error('User not found');
+            }
+
+            this.oauth2Client.setCredentials({
+                access_token: user.accessToken,
+                refresh_token: user.refreshToken
+            });
+
+            const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+
+            // First get the existing event
+            const existingEvent = await calendar.events.get({
+                calendarId: 'primary',
+                eventId: eventId
+            });
+
+            // Prepare the update payload
+            const event = {
+                summary: updateData.title || existingEvent.data.summary,
+                description: updateData.description || existingEvent.data.description,
+                start: {
+                    dateTime: updateData.startDateTime
+                        ? new Date(updateData.startDateTime).toISOString()
+                        : existingEvent.data.start.dateTime,
+                    timeZone: 'UTC'
+                },
+                end: {
+                    dateTime: updateData.endDateTime
+                        ? new Date(updateData.endDateTime).toISOString()
+                        : existingEvent.data.end.dateTime,
+                    timeZone: 'UTC'
+                }
+            };
+
+            try {
+                const response = await calendar.events.update({
+                    calendarId: 'primary',
+                    eventId: eventId,
+                    requestBody: event
+                });
+
+                return {
+                    id: response.data.id,
+                    title: response.data.summary,
+                    description: response.data.description || '',
+                    startDateTime: response.data.start.dateTime,
+                    endDateTime: response.data.end.dateTime
+                };
+            } catch (error) {
+                if (error.response?.status === 401) {
+                    // Token expired, try refreshing
+                    console.log('Refreshing expired token...');
+                    const newAccessToken = await this.refreshAccessToken(user);
+
+                    // Update credentials with new token
+                    this.oauth2Client.setCredentials({
+                        access_token: newAccessToken,
+                        refresh_token: user.refreshToken
+                    });
+
+                    // Retry the request
+                    const retryResponse = await calendar.events.update({
+                        calendarId: 'primary',
+                        eventId: eventId,
+                        requestBody: event
+                    });
+
+                    return {
+                        id: retryResponse.data.id,
+                        title: retryResponse.data.summary,
+                        description: retryResponse.data.description || '',
+                        startDateTime: retryResponse.data.start.dateTime,
+                        endDateTime: retryResponse.data.end.dateTime
+                    };
+                }
+                throw error;
+            }
+        } catch (error) {
+            console.error('Google Calendar update event error:', error);
+            throw new Error(`Failed to update event in Google Calendar: ${error.message}`);
+        }
+    }
+
+    async deleteEvent(userId, eventId) {
+        try {
+            const user = await User.findById(userId);
+            if (!user) {
+                throw new Error('User not found');
+            }
+
+            this.oauth2Client.setCredentials({
+                access_token: user.accessToken,
+                refresh_token: user.refreshToken
+            });
+
+            const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+
+            try {
+                await calendar.events.delete({
+                    calendarId: 'primary',
+                    eventId: eventId
+                });
+                return true;
+            } catch (error) {
+                if (error.response?.status === 401) {
+                    // Token expired, try refreshing
+                    console.log('Refreshing expired token...');
+                    const newAccessToken = await this.refreshAccessToken(user);
+
+                    // Update credentials with new token
+                    this.oauth2Client.setCredentials({
+                        access_token: newAccessToken,
+                        refresh_token: user.refreshToken
+                    });
+
+                    // Retry the request
+                    await calendar.events.delete({
+                        calendarId: 'primary',
+                        eventId: eventId
+                    });
+                    return true;
+                }
+                throw error;
+            }
+        } catch (error) {
+            console.error('Google Calendar delete event error:', error);
+            throw new Error(`Failed to delete event from Google Calendar: ${error.message}`);
         }
     }
 
@@ -253,6 +387,41 @@ class GoogleCalendarService {
         } catch (error) {
             console.error('Stop watch error:', error);
             throw new Error('Failed to stop calendar watch');
+        }
+    }
+
+    async listEvents(userId) {
+        try {
+            const user = await User.findById(userId);
+            if (!user) {
+                throw new Error('User not found');
+            }
+
+            this.oauth2Client.setCredentials({
+                access_token: user.accessToken,
+                refresh_token: user.refreshToken
+            });
+
+            const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+
+            const response = await calendar.events.list({
+                calendarId: 'primary',
+                timeMin: new Date().toISOString(),
+                maxResults: 100,
+                singleEvents: true,
+                orderBy: 'startTime'
+            });
+
+            return response.data.items.map(event => ({
+                id: event.id,
+                title: event.summary,
+                description: event.description || '',
+                startDateTime: event.start.dateTime || event.start.date,
+                endDateTime: event.end.dateTime || event.end.date
+            }));
+        } catch (error) {
+            console.error('List events error:', error);
+            throw new Error('Failed to list events');
         }
     }
 }

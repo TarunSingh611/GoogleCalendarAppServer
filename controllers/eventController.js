@@ -1,5 +1,4 @@
 // server/controllers/eventController.js
-const Event = require('../models/Event');
 const googleCalendarService = require('../services/googleCalendar');
 
 exports.getEvents = async (req, res) => {
@@ -8,9 +7,16 @@ exports.getEvents = async (req, res) => {
     if (!userId) {
       return res.status(400).json({ error: 'User ID is required' });
     }
-    const events = await Event.find({ userId }).sort({ startDateTime: 1 });
-    res.json({statusCode: 200, message: 'Events fetched successfully', data: events});
+
+    // Fetch events directly from Google Calendar
+    const events = await googleCalendarService.listEvents(userId);
+    res.json({
+      statusCode: 200, 
+      message: 'Events fetched successfully', 
+      data: events
+    });
   } catch (error) {
+    console.error('Fetch events error:', error);
     res.status(500).json({ error: 'Failed to fetch events' });
   }
 };
@@ -46,28 +52,12 @@ exports.createEvent = async (req, res) => {
     }
 
     // Create event in Google Calendar
-    const googleEvent = await googleCalendarService.createEvent(userId, {
+    const newEvent = await googleCalendarService.createEvent(userId, {
       title,
       description: description || '',
       startDateTime: startDate.toISOString(),
       endDateTime: endDate.toISOString()
     });
-
-    if (!googleEvent || !googleEvent.googleEventId) {
-      throw new Error('Failed to create event in Google Calendar');
-    }
-
-    // Create event in local database
-    const newEvent = new Event({
-      googleEventId: googleEvent.googleEventId,
-      userId,
-      title,
-      description: description || '',
-      startDateTime: startDate,
-      endDateTime: endDate
-    });
-
-    await newEvent.save();
 
     res.status(201).json(newEvent);
   } catch (error) {
@@ -82,20 +72,17 @@ exports.createEvent = async (req, res) => {
 exports.updateEvent = async (req, res) => {
   try {
     const { eventId } = req.params;
-    const updateData = req.body;
+    const { userId, ...updateData } = req.body;
     
-    const event = await Event.findById(eventId);
-    if (!event) {
-      return res.status(404).json({ error: 'Event not found' });
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
     }
 
-    // Update in Google Calendar
-    await googleCalendarService.updateEvent(event.userId, eventId, updateData);
-    
-    // Update in local database
-    const updatedEvent = await Event.findByIdAndUpdate(eventId, updateData, { new: true });
+    // Update directly in Google Calendar
+    const updatedEvent = await googleCalendarService.updateEvent(userId, eventId, updateData);
     res.json(updatedEvent);
   } catch (error) {
+    console.error('Update event error:', error);
     res.status(500).json({ error: 'Failed to update event' });
   }
 };
@@ -103,19 +90,17 @@ exports.updateEvent = async (req, res) => {
 exports.deleteEvent = async (req, res) => {
   try {
     const { eventId } = req.params;
+    const { userId } = req.body;
     
-    const event = await Event.findById(eventId);
-    if (!event) {
-      return res.status(404).json({ error: 'Event not found' });
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
     }
 
-    // Delete from Google Calendar
-    await googleCalendarService.deleteEvent(event.userId, event.googleEventId);
-    
-    // Delete from local database
-    await Event.findByIdAndDelete(eventId);
+    // Delete directly from Google Calendar
+    await googleCalendarService.deleteEvent(userId, eventId);
     res.json({ success: true });
   } catch (error) {
+    console.error('Delete event error:', error);
     res.status(500).json({ error: 'Failed to delete event' });
   }
 };
