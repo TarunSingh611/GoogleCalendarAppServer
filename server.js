@@ -7,6 +7,9 @@ const authRoutes = require('./routes/auth');
 const eventRoutes = require('./routes/events');
 const webhookRoutes = require('./routes/webhook');
 const { statusHTML } = require('./statusHTML');
+const cron = require('node-cron');
+const User = require('./models/User');
+const googleCalendarService = require('./services/googleCalendar');
 
 const app = express();
 
@@ -50,6 +53,32 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/webhook', webhookRoutes);
+
+
+cron.schedule('0 */12 * * *', async () => {
+  try {
+    const users = await User.find({ watchChannelId: { $exists: true } });
+    
+    for (const user of users) {
+      try {
+        // Stop existing webhook
+        await googleCalendarService.stopWatch(user.watchChannelId, user.resourceId);
+        
+        // Setup new webhook
+        const watchResponse = await googleCalendarService.setupWatch(user._id);
+        
+        // Update user with new webhook details
+        user.watchChannelId = watchResponse.id;
+        user.resourceId = watchResponse.resourceId;
+        await user.save();
+      } catch (error) {
+        console.error(`Failed to renew webhook for user ${user._id}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error('Webhook renewal cron job failed:', error);
+  }
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {

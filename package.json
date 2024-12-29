@@ -19,7 +19,8 @@
     "google-auth-library": "^7.0.0",
     "googleapis": "^92.0.0",
     "jsonwebtoken": "^8.5.1",
-    "mongoose": "^6.0.0"
+    "mongoose": "^6.0.0",
+    "node-cron": "^3.0.3"
   },
   "devDependencies": {
     "nodemon": "^2.0.15"

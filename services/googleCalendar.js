@@ -26,14 +26,14 @@ class GoogleCalendarService {
             });
 
             const { tokens } = await this.oauth2Client.refreshAccessToken();
-            
+
             // Update user's tokens in database
             user.accessToken = tokens.access_token;
             if (tokens.refresh_token) {
                 user.refreshToken = tokens.refresh_token;
             }
             await user.save();
-            
+
             return tokens.access_token;
         } catch (error) {
             console.error('Token refresh error:', error);
@@ -91,7 +91,7 @@ class GoogleCalendarService {
                 //     // Token expired, try refreshing
                 //     console.log('Refreshing expired token...');
                 //     const newAccessToken = await this.refreshAccessToken(user);
-                    
+
                 //     // Update credentials with new token
                 //     this.oauth2Client.setCredentials({
                 //         access_token: newAccessToken,
@@ -117,6 +117,142 @@ class GoogleCalendarService {
         } catch (error) {
             console.error('Google Calendar create event error:', error);
             throw new Error(`Failed to create event in Google Calendar: ${error.message}`);
+        }
+    }
+
+    async setupWatch(userId) {
+        try {
+            const user = await User.findById(userId);
+            if (!user) {
+                throw new Error('User not found');
+            }
+
+            this.oauth2Client.setCredentials({
+                access_token: user.accessToken,
+                refresh_token: user.refreshToken
+            });
+
+            const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+
+            const watchRequest = {
+                id: `channel-${userId}-${Date.now()}`, // Unique channel ID
+                type: 'web_hook',
+                address: `${process.env.SERVER_URL}/api/webhook/calendar`, // Your webhook endpoint
+                params: {
+                    ttl: '86400' // 24 hours in seconds
+                }
+            };
+
+            const response = await calendar.events.watch({
+                calendarId: 'primary',
+                requestBody: watchRequest
+            });
+
+            return {
+                id: response.data.id,
+                resourceId: response.data.resourceId,
+                expiration: response.data.expiration
+            };
+        } catch (error) {
+            console.error('Setup watch error:', error);
+            throw new Error('Failed to setup calendar watch');
+        }
+    }
+
+    async syncEvents(userId) {
+        try {
+            const user = await User.findById(userId);
+            if (!user) {
+                throw new Error('User not found');
+            }
+
+            this.oauth2Client.setCredentials({
+                access_token: user.accessToken,
+                refresh_token: user.refreshToken
+            });
+
+            const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+
+            // Get all events from Google Calendar
+            const response = await calendar.events.list({
+                calendarId: 'primary',
+                timeMin: new Date().toISOString(),
+                maxResults: 100,
+                singleEvents: true,
+                orderBy: 'startTime'
+            });
+
+            const googleEvents = response.data.items;
+
+            // Get existing events from database
+            const existingEvents = await Event.find({ userId });
+            const existingEventMap = new Map(
+                existingEvents.map(event => [event.googleEventId, event])
+            );
+
+            // Process each Google Calendar event
+            for (const googleEvent of googleEvents) {
+                const existingEvent = existingEventMap.get(googleEvent.id);
+
+                if (!existingEvent) {
+                    // Create new event
+                    await Event.create({
+                        googleEventId: googleEvent.id,
+                        userId,
+                        title: googleEvent.summary,
+                        description: googleEvent.description || '',
+                        startDateTime: googleEvent.start.dateTime || googleEvent.start.date,
+                        endDateTime: googleEvent.end.dateTime || googleEvent.end.date
+                    });
+                } else {
+                    // Update existing event if changed
+                    const needsUpdate =
+                        existingEvent.title !== googleEvent.summary ||
+                        existingEvent.description !== (googleEvent.description || '') ||
+                        new Date(existingEvent.startDateTime).getTime() !== new Date(googleEvent.start.dateTime || googleEvent.start.date).getTime() ||
+                        new Date(existingEvent.endDateTime).getTime() !== new Date(googleEvent.end.dateTime || googleEvent.end.date).getTime();
+
+                    if (needsUpdate) {
+                        await Event.findByIdAndUpdate(existingEvent._id, {
+                            title: googleEvent.summary,
+                            description: googleEvent.description || '',
+                            startDateTime: googleEvent.start.dateTime || googleEvent.start.date,
+                            endDateTime: googleEvent.end.dateTime || googleEvent.end.date
+                        });
+                    }
+                }
+
+                // Remove from map to track deletions
+                existingEventMap.delete(googleEvent.id);
+            }
+
+            // Delete events that no longer exist in Google Calendar
+            for (const [googleEventId, event] of existingEventMap) {
+                await Event.findByIdAndDelete(event._id);
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Sync events error:', error);
+            throw new Error('Failed to sync events');
+        }
+    }
+
+    async stopWatch(channelId, resourceId) {
+        try {
+            const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+
+            await calendar.channels.stop({
+                requestBody: {
+                    id: channelId,
+                    resourceId: resourceId
+                }
+            });
+
+            return true;
+        } catch (error) {
+            console.error('Stop watch error:', error);
+            throw new Error('Failed to stop calendar watch');
         }
     }
 }

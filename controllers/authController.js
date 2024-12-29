@@ -42,6 +42,15 @@ exports.googleAuth = async (req, res) => {
 
       await user.save();
 
+      try {
+        const watchResponse = await googleCalendarService.setupWatch(user._id);
+        user.watchChannelId = watchResponse.id;
+        user.resourceId = watchResponse.resourceId;
+        await user.save();
+      } catch (error) {
+        console.error('Failed to setup webhook:', error);
+      }
+
       // Generate JWT
       const token = jwt.sign(
           { userId: user._id },

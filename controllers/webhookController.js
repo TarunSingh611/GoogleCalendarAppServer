@@ -4,47 +4,85 @@ const googleCalendarService = require('../services/googleCalendar');
 
 exports.handleCalendarWebhook = async (req, res) => {
     try {
-        const channelId = req.headers['x-goog-channel-id'];
-        const resourceState = req.headers['x-goog-resource-state'];
-        const messageNumber = req.headers['x-goog-message-number'];
-
-        console.log(`Received webhook: Channel ${channelId}, State: ${resourceState}`);
-
-        // Find user associated with this channel
-        const user = await User.findOne({ watchChannelId: channelId });
-        if (!user) {
-            console.log('No user found for channel:', channelId);
-            return res.status(404).send('Channel not found');
-        }
-
-        // Handle different resource states
-        switch (resourceState) {
-            case 'sync':
-                // Initial sync message
-                console.log('Sync notification received');
-                break;
-
-            case 'exists':
-            case 'update':
-                // Calendar was updated
-                console.log('Calendar update notification received');
-                await googleCalendarService.syncEvents(user._id);
-                break;
-
-            case 'not_exists':
-                console.log('Resource does not exist');
-                break;
-
-            default:
-                console.log('Unknown resource state:', resourceState);
-        }
-
-        res.status(200).send('OK');
+      const channelId = req.headers['x-goog-channel-id'];
+      const resourceState = req.headers['x-goog-resource-state'];
+      
+      // Find user associated with this channel
+      const user = await User.findOne({ watchChannelId: channelId });
+      if (!user) {
+        console.log('No user found for channel:', channelId);
+        return res.status(404).send('Channel not found');
+      }
+  
+      // Handle different resource states
+      switch (resourceState) {
+        case 'sync':
+          // Initial sync completed
+          console.log('Sync notification received');
+          break;
+  
+        case 'exists':
+        case 'update':
+          // Calendar was updated
+          console.log('Calendar update notification received');
+          await googleCalendarService.syncEvents(user._id);
+          break;
+  
+        case 'not_exists':
+          console.log('Resource does not exist');
+          break;
+  
+        default:
+          console.log('Unknown resource state:', resourceState);
+      }
+  
+      res.status(200).send('OK');
     } catch (error) {
-        console.error('Webhook handling error:', error);
-        res.status(500).send('Internal Server Error');
+      console.error('Webhook handling error:', error);
+      res.status(500).send('Internal Server Error');
     }
-};
+  };
+
+exports.handleCalendarWebhook = async (req, res) => {
+    try {
+      const channelId = req.headers['x-goog-channel-id'];
+      const resourceState = req.headers['x-goog-resource-state'];
+      
+      // Find user associated with this channel
+      const user = await User.findOne({ watchChannelId: channelId });
+      if (!user) {
+        console.log('No user found for channel:', channelId);
+        return res.status(404).send('Channel not found');
+      }
+  
+      // Handle different resource states
+      switch (resourceState) {
+        case 'sync':
+          // Initial sync completed
+          console.log('Sync notification received');
+          break;
+  
+        case 'exists':
+        case 'update':
+          // Calendar was updated
+          console.log('Calendar update notification received');
+          await googleCalendarService.syncEvents(user._id);
+          break;
+  
+        case 'not_exists':
+          console.log('Resource does not exist');
+          break;
+  
+        default:
+          console.log('Unknown resource state:', resourceState);
+      }
+  
+      res.status(200).send('OK');
+    } catch (error) {
+      console.error('Webhook handling error:', error);
+      res.status(500).send('Internal Server Error');
+    }
+  };
 
 exports.setupWebhook = async (req, res) => {
     try {
