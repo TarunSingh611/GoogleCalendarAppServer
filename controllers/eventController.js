@@ -59,7 +59,7 @@ exports.createEvent = async (req, res) => {
       endDateTime: endDate.toISOString()
     });
 
-    res.status(201).json(newEvent);
+    res.status(201).json({success: true, event: newEvent});
   } catch (error) {
     console.error('Create event error:', error);
     res.status(500).json({ 
