@@ -80,7 +80,7 @@ exports.updateEvent = async (req, res) => {
 
     // Update directly in Google Calendar
     const updatedEvent = await googleCalendarService.updateEvent(userId, eventId, updateData);
-    res.json(updatedEvent);
+    res.json({ success: true, event: updatedEvent });
   } catch (error) {
     console.error('Update event error:', error);
     res.status(500).json({ error: 'Failed to update event' });
