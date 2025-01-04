@@ -41,84 +41,65 @@ class GoogleCalendarService {
         }
     }
 
-    async createEvent(userId, eventData) {
-        try {
-            const user = await User.findById(userId);
-            if (!user) {
-                throw new Error('User not found');
-            }
-
-            if (!user.accessToken) {
-                throw new Error('User not properly authenticated with Google Calendar');
-            }
-
-            // Set credentials
-            this.oauth2Client.setCredentials({
-                access_token: user.accessToken,
-                refresh_token: user.refreshToken
-            });
-
-            const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
-
-            const event = {
-                summary: eventData.title,
-                description: eventData.description || '',
-                start: {
-                    dateTime: new Date(eventData.startDateTime).toISOString(),
-                    timeZone: 'UTC'
-                },
-                end: {
-                    dateTime: new Date(eventData.endDateTime).toISOString(),
-                    timeZone: 'UTC'
-                }
-            };
-
-            try {
-                const response = await calendar.events.insert({
-                    calendarId: 'primary',
-                    requestBody: event  // Changed from resource to requestBody
-                });
-
-                return {
-                    googleEventId: response.data.id,
-                    title: response.data.summary,
-                    description: response.data.description || '',
-                    startDateTime: response.data.start.dateTime,
-                    endDateTime: response.data.end.dateTime
-                };
-            } catch (error) {
-                if (error.response?.status === 401) {
-                    // Token expired, try refreshing
-                    console.log('Refreshing expired token...');
-                    const newAccessToken = await this.refreshAccessToken(user);
-
-                    // Update credentials with new token
-                    this.oauth2Client.setCredentials({
-                        access_token: newAccessToken,
-                        refresh_token: user.refreshToken
-                    });
-
-                    // Retry the request
-                    const retryResponse = await calendar.events.insert({
-                        calendarId: 'primary',
-                        requestBody: event
-                    });
-
-                    return {
-                        googleEventId: retryResponse.data.id,
-                        title: retryResponse.data.summary,
-                        description: retryResponse.data.description || '',
-                        startDateTime: retryResponse.data.start.dateTime,
-                        endDateTime: retryResponse.data.end.dateTime
-                    };
-                }
-                throw error;
-            }
-        } catch (error) {
-            console.error('Google Calendar create event error:', error);
-            throw new Error(`Failed to create event in Google Calendar: ${error.message}`);
-        }
+    async createEvent(req, res){
+    try { 
+      const { userId, title, description, startDateTime, endDateTime } = req.body;
+  
+      // Input validation
+      if (!userId || !title || !startDateTime || !endDateTime) {
+        return res.status(400).json({ 
+          error: 'Missing required fields',
+          required: ['userId', 'title', 'startDateTime', 'endDateTime']
+        });
+      }
+  
+      // Create event in Google Calendar
+      const googleEvent = await googleCalendarService.createEvent(userId, {
+        title,
+        description: description || '',
+        startDateTime,
+        endDateTime
+      });
+  
+      // Store in MongoDB
+      const event = await Event.create({
+        googleEventId: googleEvent.googleEventId,
+        userId,
+        title: googleEvent.title,
+        description: googleEvent.description,
+        startDateTime: googleEvent.startDateTime,
+        endDateTime: googleEvent.endDateTime
+      });
+  
+      res.status(201).json({ success: true, event });
+    } catch (error) {
+      console.error('Create event error:', error);
+      res.status(500).json({ error: 'Failed to create event' });
     }
+  };
+  
+  async getEvents (req, res) {
+    try {
+      const { userId } = req.params;
+      if(!userId){
+        return res.status(400).json({
+          error: 'Missing required fields',
+          required: ['userId']
+        });
+      }
+      const events = await Event.find({ userId });
+      
+
+      googleCalendarService.syncEvents(userId).catch(error => {
+        console.error('Background sync failed:', error);
+      });
+  
+      res.json(events);
+    } catch (error) {
+      console.error('Fetch events error:', error);
+      res.status(500).json({ error: 'Failed to fetch events' });
+    }
+  };
 
     async updateEvent(userId, eventId, updateData) {
         try {

@@ -54,7 +54,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/webhook', webhookRoutes);
 
-
+// Run every 12 hours
 cron.schedule('0 */12 * * *', async () => {
   try {
     const users = await User.find({ watchChannelId: { $exists: true } });
