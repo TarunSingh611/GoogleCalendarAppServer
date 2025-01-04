@@ -16,64 +16,72 @@ exports.googleAuth = async (req, res) => {
     const tokenPayload = await exchangeCodeForTokens(code);
     const { id_token: tokenId, access_token, refresh_token } = tokenPayload;
 
-      const ticket = await client.verifyIdToken({
-          idToken: tokenId,
-          audience: process.env.GOOGLE_CLIENT_ID
+    const ticket = await client.verifyIdToken({
+      idToken: tokenId,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const ticketPayload = ticket.getPayload();
+    const { sub: googleId, email } = ticketPayload;
+
+    let user = await User.findOne({ googleId });
+
+    if (!user) {
+      // Create new user
+      user = new User({
+        googleId,
+        email,
+        accessToken: access_token,
+        refreshToken: refresh_token,
       });
-
-      const ticketPayload = ticket.getPayload();
-      const { sub: googleId, email } = ticketPayload;
-
-      let user = await User.findOne({ googleId });
-
-      if (!user) {
-          // Create new user
-          user = new User({
-              googleId,
-              email,
-              accessToken: access_token,
-              refreshToken: refresh_token
-          });
-      } else {
+    } else {
       // For existing users
       user.accessToken = access_token;
       user.refreshToken = refresh_token;
-      }
+    }
 
+    await user.save();
+
+    // Trigger Google Calendar sync for the first-time login
+    try {
+      await googleCalendarService.syncEvents(user._id);
+    } catch (error) {
+      console.error('Failed to sync events during login:', error);
+    }
+
+    // Setup webhook for real-time updates
+    try {
+      const watchResponse = await googleCalendarService.setupWatch(user._id);
+      user.watchChannelId = watchResponse.id;
+      user.resourceId = watchResponse.resourceId;
       await user.save();
+    } catch (error) {
+      console.error('Failed to setup webhook:', error);
+    }
 
-      try {
-        const watchResponse = await googleCalendarService.setupWatch(user._id);
-        user.watchChannelId = watchResponse.id;
-        user.resourceId = watchResponse.resourceId;
-        await user.save();
-      } catch (error) {
-        console.error('Failed to setup webhook:', error);
-      }
+    // Generate JWT
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
 
-      // Generate JWT
-      const token = jwt.sign(
-          { userId: user._id },
-          process.env.JWT_SECRET,
-          { expiresIn: '24h' }
-      );
-
-      res.json({
-          token,
-          user: {
-              _id: user._id,
-              email: user.email
-          }
-      });
+    res.json({
+      token,
+      user: {
+        _id: user._id,
+        email: user.email,
+      },
+    });
   } catch (error) {
-      console.error('Auth error:', error);
-      res.status(500).json({
-          error: 'Authentication failed',
-          details: error.message
-      });
+    console.error('Auth error:', error);
+    res.status(500).json({
+      error: 'Authentication failed',
+      details: error.message,
+    });
   }
 };
-// Add a separate endpoint to update refresh token
+
 exports.refreshToken = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -81,7 +89,7 @@ exports.refreshToken = async (req, res) => {
 
     // Validate inputs
     if (!userId || !refreshToken) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Missing required parameters',
         details: 'User ID and refresh token are required'
       });
@@ -90,15 +98,15 @@ exports.refreshToken = async (req, res) => {
     // Find user
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ 
-        error: 'User not found' 
+      return res.status(404).json({
+        error: 'User not found'
       });
     }
 
     // Verify refresh token matches
     if (user.refreshToken !== refreshToken) {
-      return res.status(401).json({ 
-        error: 'Invalid refresh token' 
+      return res.status(401).json({
+        error: 'Invalid refresh token'
       });
     }
 

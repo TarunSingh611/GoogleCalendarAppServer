@@ -41,65 +41,65 @@ class GoogleCalendarService {
         }
     }
 
-    async createEvent(req, res){
-    try { 
-      const { userId, title, description, startDateTime, endDateTime } = req.body;
-  
-      // Input validation
-      if (!userId || !title || !startDateTime || !endDateTime) {
-        return res.status(400).json({ 
-          error: 'Missing required fields',
-          required: ['userId', 'title', 'startDateTime', 'endDateTime']
-        });
-      }
-  
-      // Create event in Google Calendar
-      const googleEvent = await googleCalendarService.createEvent(userId, {
-        title,
-        description: description || '',
-        startDateTime,
-        endDateTime
-      });
-  
-      // Store in MongoDB
-      const event = await Event.create({
-        googleEventId: googleEvent.googleEventId,
-        userId,
-        title: googleEvent.title,
-        description: googleEvent.description,
-        startDateTime: googleEvent.startDateTime,
-        endDateTime: googleEvent.endDateTime
-      });
-  
-      res.status(201).json({ success: true, event });
-    } catch (error) {
-      console.error('Create event error:', error);
-      res.status(500).json({ error: 'Failed to create event' });
-    }
-  };
-  
-  async getEvents (req, res) {
-    try {
-      const { userId } = req.params;
-      if(!userId){
-        return res.status(400).json({
-          error: 'Missing required fields',
-          required: ['userId']
-        });
-      }
-      const events = await Event.find({ userId });
-      
+    async createEvent(req, res) {
+        try {
+            const { userId, title, description, startDateTime, endDateTime } = req.body;
 
-      googleCalendarService.syncEvents(userId).catch(error => {
-        console.error('Background sync failed:', error);
-      });
-  
-      res.json(events);
-    } catch (error) {
-      console.error('Fetch events error:', error);
-      res.status(500).json({ error: 'Failed to fetch events' });
-    }
-  };
+            // Input validation
+            if (!userId || !title || !startDateTime || !endDateTime) {
+                return res.status(400).json({
+                    error: 'Missing required fields',
+                    required: ['userId', 'title', 'startDateTime', 'endDateTime']
+                });
+            }
+
+            // Create event in Google Calendar
+            const googleEvent = await googleCalendarService.createEvent(userId, {
+                title,
+                description: description || '',
+                startDateTime,
+                endDateTime
+            });
+
+            // Store in MongoDB
+            const event = await Event.create({
+                googleEventId: googleEvent.googleEventId,
+                userId,
+                title: googleEvent.title,
+                description: googleEvent.description,
+                startDateTime: googleEvent.startDateTime,
+                endDateTime: googleEvent.endDateTime
+            });
+
+            res.status(201).json({ success: true, event });
+        } catch (error) {
+            console.error('Create event error:', error);
+            res.status(500).json({ error: 'Failed to create event' });
+        }
+    };
+
+    async getEvents(req, res) {
+        try {
+            const { userId } = req.params;
+            if (!userId) {
+                return res.status(400).json({
+                    error: 'Missing required fields',
+                    required: ['userId']
+                });
+            }
+            const events = await Event.find({ userId });
+
+
+            googleCalendarService.syncEvents(userId).catch(error => {
+                console.error('Background sync failed:', error);
+            });
+
+            res.json(events);
+        } catch (error) {
+            console.error('Fetch events error:', error);
+            res.status(500).json({ error: 'Failed to fetch events' });
+        }
+    };
 
     async updateEvent(userId, eventId, updateData) {
         try {
@@ -235,6 +235,7 @@ class GoogleCalendarService {
         }
     }
 
+
     async setupWatch(userId) {
         try {
             const user = await User.findById(userId);
@@ -249,14 +250,21 @@ class GoogleCalendarService {
 
             const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
 
+            // Use NGROK_URL for local development, fallback to SERVER_URL for production
+            const webhookBaseUrl = process.env.NODE_ENV === 'development'
+                ? process.env.NGROK_URL
+                : process.env.SERVER_URL;
+
             const watchRequest = {
-                id: `channel-${userId}-${Date.now()}`, // Unique channel ID
+                id: `channel-${userId}-${Date.now()}`,
                 type: 'web_hook',
-                address: `${process.env.SERVER_URL}/api/webhook/calendar`, // Your webhook endpoint
+                address: `${webhookBaseUrl}/api/webhook/calendar`,
                 params: {
                     ttl: '86400' // 24 hours in seconds
                 }
             };
+
+            console.log(`Setting up webhook at: ${watchRequest.address}`);
 
             const response = await calendar.events.watch({
                 calendarId: 'primary',
@@ -283,68 +291,62 @@ class GoogleCalendarService {
 
             this.oauth2Client.setCredentials({
                 access_token: user.accessToken,
-                refresh_token: user.refreshToken
+                refresh_token: user.refreshToken,
             });
 
             const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
 
-            // Get all events from Google Calendar
-            const response = await calendar.events.list({
-                calendarId: 'primary',
-                timeMin: new Date().toISOString(),
-                maxResults: 100,
-                singleEvents: true,
-                orderBy: 'startTime'
-            });
+            let nextPageToken = null;
+            do {
+                const response = await calendar.events.list({
+                    calendarId: 'primary',
+                    timeMin: new Date().toISOString(),
+                    maxResults: 100,
+                    singleEvents: true,
+                    orderBy: 'startTime',
+                    pageToken: nextPageToken,
+                });
 
-            const googleEvents = response.data.items;
-
-            // Get existing events from database
-            const existingEvents = await Event.find({ userId });
-            const existingEventMap = new Map(
-                existingEvents.map(event => [event.googleEventId, event])
-            );
-
-            // Process each Google Calendar event
-            for (const googleEvent of googleEvents) {
-                const existingEvent = existingEventMap.get(googleEvent.id);
-
-                if (!existingEvent) {
-                    // Create new event
-                    await Event.create({
+                const googleEvents = response.data.items;
+                for (const googleEvent of googleEvents) {
+                    const existingEvent = await Event.findOne({
                         googleEventId: googleEvent.id,
                         userId,
-                        title: googleEvent.summary,
-                        description: googleEvent.description || '',
-                        startDateTime: googleEvent.start.dateTime || googleEvent.start.date,
-                        endDateTime: googleEvent.end.dateTime || googleEvent.end.date
                     });
-                } else {
-                    // Update existing event if changed
-                    const needsUpdate =
-                        existingEvent.title !== googleEvent.summary ||
-                        existingEvent.description !== (googleEvent.description || '') ||
-                        new Date(existingEvent.startDateTime).getTime() !== new Date(googleEvent.start.dateTime || googleEvent.start.date).getTime() ||
-                        new Date(existingEvent.endDateTime).getTime() !== new Date(googleEvent.end.dateTime || googleEvent.end.date).getTime();
 
-                    if (needsUpdate) {
-                        await Event.findByIdAndUpdate(existingEvent._id, {
+                    if (!existingEvent) {
+                        // Create new event
+                        await Event.create({
+                            googleEventId: googleEvent.id,
+                            userId,
                             title: googleEvent.summary,
                             description: googleEvent.description || '',
                             startDateTime: googleEvent.start.dateTime || googleEvent.start.date,
-                            endDateTime: googleEvent.end.dateTime || googleEvent.end.date
+                            endDateTime: googleEvent.end.dateTime || googleEvent.end.date,
                         });
+                    } else {
+                        // Update existing event if changed
+                        const needsUpdate =
+                            existingEvent.title !== googleEvent.summary ||
+                            existingEvent.description !== (googleEvent.description || '') ||
+                            new Date(existingEvent.startDateTime).getTime() !==
+                            new Date(googleEvent.start.dateTime || googleEvent.start.date).getTime() ||
+                            new Date(existingEvent.endDateTime).getTime() !==
+                            new Date(googleEvent.end.dateTime || googleEvent.end.date).getTime();
+
+                        if (needsUpdate) {
+                            await Event.findByIdAndUpdate(existingEvent._id, {
+                                title: googleEvent.summary,
+                                description: googleEvent.description || '',
+                                startDateTime: googleEvent.start.dateTime || googleEvent.start.date,
+                                endDateTime: googleEvent.end.dateTime || googleEvent.end.date,
+                            });
+                        }
                     }
                 }
 
-                // Remove from map to track deletions
-                existingEventMap.delete(googleEvent.id);
-            }
-
-            // Delete events that no longer exist in Google Calendar
-            for (const [googleEventId, event] of existingEventMap) {
-                await Event.findByIdAndDelete(event._id);
-            }
+                nextPageToken = response.data.nextPageToken;
+            } while (nextPageToken);
 
             return true;
         } catch (error) {
