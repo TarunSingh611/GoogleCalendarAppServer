@@ -4,6 +4,7 @@ const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
 const googleCalendarService = require('../services/googleCalendarService.js');
 const { exchangeCodeForTokens } = require('../services/getTokens.js');
+const googleEventService = require('../services/googleEventService.js');
 
 const client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -74,7 +75,7 @@ exports.googleAuth = async (req, res) => {
 
     // Sync calendar events
     try {
-      await googleCalendarService.syncEvents(user._id);
+      await googleEventService.syncCalendarWithDatabase(user._id);
     } catch (error) {
       console.error('Failed to sync events during login:', error);
       // Don't fail the auth process if sync fails
