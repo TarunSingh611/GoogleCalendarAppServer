@@ -80,6 +80,22 @@ cron.schedule('0 */12 * * *', async () => {
   }
 });
 
+cron.schedule('*/15 * * * *', async () => {
+  try {
+    const users = await User.find({});
+    for (const user of users) {
+      try {
+        await syncCalendarWithDatabase(user._id);
+        console.log(`Synced calendar for user ${user._id}`);
+      } catch (error) {
+        console.error(`Failed to sync calendar for user ${user._id}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error('Periodic sync failed:', error);
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);

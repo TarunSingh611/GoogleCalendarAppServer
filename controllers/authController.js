@@ -9,13 +9,20 @@ const client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET
 );
-
 exports.googleAuth = async (req, res) => {
   try {
     const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({
+        error: 'Missing authorization code',
+      });
+    }
+
+    // Exchange code for tokens
     const tokenPayload = await exchangeCodeForTokens(code);
     const { id_token: tokenId, access_token, refresh_token } = tokenPayload;
 
+    // Verify the ID token
     const ticket = await client.verifyIdToken({
       idToken: tokenId,
       audience: process.env.GOOGLE_CLIENT_ID,
@@ -24,10 +31,12 @@ exports.googleAuth = async (req, res) => {
     const ticketPayload = ticket.getPayload();
     const { sub: googleId, email } = ticketPayload;
 
+    // Find or create user
     let user = await User.findOne({ googleId });
+    let isNewUser = false;
 
     if (!user) {
-      // Create new user
+      isNewUser = true;
       user = new User({
         googleId,
         email,
@@ -35,18 +44,21 @@ exports.googleAuth = async (req, res) => {
         refreshToken: refresh_token,
       });
     } else {
-      // For existing users
       user.accessToken = access_token;
-      user.refreshToken = refresh_token;
+      if (refresh_token) { // Only update refresh token if provided
+        user.refreshToken = refresh_token;
+      }
     }
 
-    await user.save();
-
-    // Trigger Google Calendar sync for the first-time login
+    // Save user first to ensure we have a valid user._id
     try {
-      await googleCalendarService.syncEvents(user._id);
+      await user.save();
     } catch (error) {
-      console.error('Failed to sync events during login:', error);
+      console.error('Failed to save user:', error);
+      return res.status(500).json({
+        error: 'Failed to save user data',
+        details: error.message,
+      });
     }
 
     // Setup webhook for real-time updates
@@ -57,31 +69,62 @@ exports.googleAuth = async (req, res) => {
       await user.save();
     } catch (error) {
       console.error('Failed to setup webhook:', error);
+      // Don't fail the auth process if webhook setup fails
     }
 
-    // Generate JWT
+    // Sync calendar events
+    try {
+      await googleCalendarService.syncEvents(user._id);
+    } catch (error) {
+      console.error('Failed to sync events during login:', error);
+      // Don't fail the auth process if sync fails
+    }
+
+    // Generate JWT token
     const token = jwt.sign(
-      { userId: user._id },
+      {
+        userId: user._id,
+        email: user.email
+      },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
+    // Send response
     res.json({
       token,
       user: {
         _id: user._id,
         email: user.email,
+        isNewUser
       },
     });
+
   } catch (error) {
-    console.error('Auth error:', error);
+    console.error('Authentication error:', error);
+
+    // Handle specific error types
+    if (error.message.includes('Invalid token')) {
+      return res.status(401).json({
+        error: 'Invalid authentication token',
+        details: error.message,
+      });
+    }
+
+    if (error.message.includes('Token expired')) {
+      return res.status(401).json({
+        error: 'Authentication token expired',
+        details: error.message,
+      });
+    }
+
+    // Generic error response
     res.status(500).json({
       error: 'Authentication failed',
       details: error.message,
     });
   }
 };
-
 exports.refreshToken = async (req, res) => {
   try {
     const { userId } = req.params;

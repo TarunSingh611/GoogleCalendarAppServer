@@ -1,6 +1,7 @@
 // services/googleCalendar.js
 const { google } = require('googleapis');
 const User = require('../models/User');
+const Event = require('../models/Event');
 
 class GoogleCalendarService {
     constructor() {
@@ -236,51 +237,57 @@ class GoogleCalendarService {
     }
 
 
-    async setupWatch(userId) {
-        try {
-            const user = await User.findById(userId);
-            if (!user) {
-                throw new Error('User not found');
-            }
-
-            this.oauth2Client.setCredentials({
-                access_token: user.accessToken,
-                refresh_token: user.refreshToken
-            });
-
-            const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
-
-            // Use NGROK_URL for local development, fallback to SERVER_URL for production
-            const webhookBaseUrl = process.env.NODE_ENV === 'development'
-                ? process.env.NGROK_URL
-                : process.env.SERVER_URL;
-
-            const watchRequest = {
-                id: `channel-${userId}-${Date.now()}`,
-                type: 'web_hook',
-                address: `${webhookBaseUrl}/api/webhook/calendar`,
-                params: {
-                    ttl: '86400' // 24 hours in seconds
-                }
-            };
-
-            console.log(`Setting up webhook at: ${watchRequest.address}`);
-
-            const response = await calendar.events.watch({
-                calendarId: 'primary',
-                requestBody: watchRequest
-            });
-
-            return {
-                id: response.data.id,
-                resourceId: response.data.resourceId,
-                expiration: response.data.expiration
-            };
-        } catch (error) {
-            console.error('Setup watch error:', error);
-            throw new Error('Failed to setup calendar watch');
+    // services/googleCalendarService.js
+async setupWatch(userId) {
+    try {
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+  
+      this.oauth2Client.setCredentials({
+        access_token: user.accessToken,
+        refresh_token: user.refreshToken,
+      });
+  
+      const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+  
+      const webhookBaseUrl = process.env.NODE_ENV === 'development'
+        ? process.env.NGROK_URL
+        : process.env.SERVER_URL;
+  
+      if (!webhookBaseUrl) {
+        throw new Error('Webhook base URL not configured');
+      }
+  
+      const watchRequest = {
+        id: `channel-${userId}-${Date.now()}`,
+        type: 'web_hook',
+        address: `${webhookBaseUrl}/api/webhook/calendar`,
+        params: {
+          ttl: '86400' // 24 hours in seconds
         }
+      };
+  
+      console.log(`Setting up webhook at: ${watchRequest.address}`);
+  
+      const response = await calendar.events.watch({
+        calendarId: 'primary',
+        requestBody: watchRequest
+      });
+  
+      console.log('Webhook setup response:', response.data);
+  
+      return {
+        id: response.data.id,
+        resourceId: response.data.resourceId,
+        expiration: response.data.expiration
+      };
+    } catch (error) {
+      console.error('Setup watch error:', error);
+      throw new Error(`Failed to setup calendar watch: ${error.message}`);
     }
+  }
 
     async syncEvents(userId) {
         try {
