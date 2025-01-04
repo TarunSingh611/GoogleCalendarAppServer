@@ -63,6 +63,7 @@ exports.googleAuth = async (req, res) => {
 
     // Setup webhook for real-time updates
     try {
+      await googleCalendarService.stopWatch(user.watchChannelId, user.resourceId);
       const watchResponse = await googleCalendarService.setupWatch(user._id);
       user.watchChannelId = watchResponse.id;
       user.resourceId = watchResponse.resourceId;

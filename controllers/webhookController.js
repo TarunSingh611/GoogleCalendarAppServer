@@ -1,6 +1,7 @@
 // server/controllers/webhookController.js
 const User = require('../models/User');
 const googleEventService = require('../services/googleEventService');
+const googleCalendarService = require('../services/googleCalendarService');
 
 
 exports.handleCalendarWebhook = async (req, res) => {
@@ -56,7 +57,8 @@ exports.setupWebhook = async (req, res) => {
     }
 
     // Setup webhook with Google Calendar
-    const watchResponse = await googleEventService.setupWatch(userId);
+    await googleCalendarService.stopWatch(user.watchChannelId, user.resourceId);
+    const watchResponse = await googleCalendarService.setupWatch(userId);
 
     // Update user with webhook details
     user.watchChannelId = watchResponse.id;
