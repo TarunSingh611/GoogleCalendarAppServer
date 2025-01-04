@@ -1,4 +1,3 @@
-// server/controllers/authController.js
 const User = require('../models/User');
 const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
@@ -78,7 +77,6 @@ exports.googleAuth = async (req, res) => {
       await googleEventService.syncCalendarWithDatabase(user._id);
     } catch (error) {
       console.error('Failed to sync events during login:', error);
-      // Don't fail the auth process if sync fails
     }
 
     // Generate JWT token
@@ -91,7 +89,6 @@ exports.googleAuth = async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    // Send response
     res.json({
       token,
       user: {
@@ -104,7 +101,6 @@ exports.googleAuth = async (req, res) => {
   } catch (error) {
     console.error('Authentication error:', error);
 
-    // Handle specific error types
     if (error.message.includes('Invalid token')) {
       return res.status(401).json({
         error: 'Invalid authentication token',
@@ -119,7 +115,6 @@ exports.googleAuth = async (req, res) => {
       });
     }
 
-    // Generic error response
     res.status(500).json({
       error: 'Authentication failed',
       details: error.message,

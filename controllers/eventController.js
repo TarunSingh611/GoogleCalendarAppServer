@@ -2,75 +2,16 @@
 const googleEventService = require('../services/googleEventService');
 const Event = require('../models/Event');
 
-async function syncCalendarWithDatabase(userId) {
-  try {
-    // Get all events from Google Calendar
-    const googleEvents = await googleEventService.listEvents(userId);
-    const googleEventIds = new Set(googleEvents.map(event => event.id));
-
-    // Get all events from database
-    const dbEvents = await Event.find({ userId });
-
-    // Delete events that exist in DB but not in Google Calendar
-    for (const dbEvent of dbEvents) {
-      if (!googleEventIds.has(dbEvent.googleEventId)) {
-        await Event.findByIdAndDelete(dbEvent._id);
-        console.log(`Deleted event ${dbEvent.googleEventId} from database`);
-      }
-    }
-
-    // Update or create events from Google Calendar
-    for (const googleEvent of googleEvents) {
-      const existingEvent = await Event.findOne({
-        googleEventId: googleEvent.id,
-        userId
-      });
-
-      if (!existingEvent) {
-        // Create new event
-        await Event.create({
-          googleEventId: googleEvent.id,
-          userId,
-          title: googleEvent.title,
-          description: googleEvent.description || '',
-          startDateTime: googleEvent.startDateTime,
-          endDateTime: googleEvent.endDateTime
-        });
-      } else {
-        // Update existing event if changed
-        const needsUpdate =
-          existingEvent.title !== googleEvent.title ||
-          existingEvent.description !== (googleEvent.description || '') ||
-          new Date(existingEvent.startDateTime).getTime() !== new Date(googleEvent.startDateTime).getTime() ||
-          new Date(existingEvent.endDateTime).getTime() !== new Date(googleEvent.endDateTime).getTime();
-
-        if (needsUpdate) {
-          await Event.findByIdAndUpdate(existingEvent._id, {
-            title: googleEvent.title,
-            description: googleEvent.description || '',
-            startDateTime: googleEvent.startDateTime,
-            endDateTime: googleEvent.endDateTime
-          });
-        }
-      }
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Sync calendar with database error:', error);
-    throw error;
-  }
-}
-
 exports.getEvents = async (req, res) => {
   try {
     const { userId } = req.params;
+
     if (!userId) {
       return res.status(400).json({ error: 'User ID is required' });
     }
 
     // First sync with Google Calendar to ensure data is up to date
-    await syncCalendarWithDatabase(userId);
+    await googleEventService.syncCalendarWithDatabase(userId);
 
     // Fetch events from database
     const events = await Event.find({ userId }).sort({ startDateTime: 1 });
