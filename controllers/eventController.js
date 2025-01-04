@@ -1,5 +1,5 @@
 // server/controllers/eventController.js
-const googleCalendarService = require('../services/googleCalendar');
+const googleEventService = require('../services/googleEventService');
 
 exports.getEvents = async (req, res) => {
   try {
@@ -9,7 +9,7 @@ exports.getEvents = async (req, res) => {
     }
 
     // Fetch events directly from Google Calendar
-    const events = await googleCalendarService.listEvents(userId);
+    const events = await googleEventService.listEvents(userId);
     res.json({
       statusCode: 200, 
       message: 'Events fetched successfully', 
@@ -52,7 +52,7 @@ exports.createEvent = async (req, res) => {
     }
 
     // Create event in Google Calendar
-    const newEvent = await googleCalendarService.createEvent(userId, {
+    const newEvent = await googleEventService.createEvent(userId, {
       title,
       description: description || '',
       startDateTime: startDate.toISOString(),
@@ -79,7 +79,7 @@ exports.updateEvent = async (req, res) => {
     }
 
     // Update directly in Google Calendar
-    const updatedEvent = await googleCalendarService.updateEvent(userId, eventId, updateData);
+    const updatedEvent = await googleEventService.updateEvent(userId, eventId, updateData);
     res.json({ success: true, event: updatedEvent });
   } catch (error) {
     console.error('Update event error:', error);
@@ -97,7 +97,7 @@ exports.deleteEvent = async (req, res) => {
     }
 
     // Delete directly from Google Calendar
-    await googleCalendarService.deleteEvent(userId, eventId);
+    await googleEventService.deleteEvent(userId, eventId);
     res.json({ success: true });
   } catch (error) {
     console.error('Delete event error:', error);

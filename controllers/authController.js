@@ -2,7 +2,7 @@
 const User = require('../models/User');
 const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
-const googleCalendarService = require('../services/googleCalendar');
+const googleCalendarService = require('../services/googleCalendarService.js');
 const { exchangeCodeForTokens } = require('../services/getTokens.js');
 
 const client = new google.auth.OAuth2(

@@ -9,7 +9,7 @@ const webhookRoutes = require('./routes/webhook');
 const { statusHTML } = require('./statusHTML');
 const cron = require('node-cron');
 const User = require('./models/User');
-const googleCalendarService = require('./services/googleCalendar');
+const googleCalendarService = require('./services/googleCalendarService');
 
 const app = express();
 
