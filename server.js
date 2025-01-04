@@ -10,6 +10,7 @@ const { statusHTML } = require('./statusHTML');
 const cron = require('node-cron');
 const User = require('./models/User');
 const googleCalendarService = require('./services/googleCalendarService');
+const googleEventService = require('./services/googleEventService');
 
 const app = express();
 
@@ -85,7 +86,7 @@ cron.schedule('*/15 * * * *', async () => {
     const users = await User.find({});
     for (const user of users) {
       try {
-        await syncCalendarWithDatabase(user._id);
+        await googleEventService.syncCalendarWithDatabase(user._id);
         console.log(`Synced calendar for user ${user._id}`);
       } catch (error) {
         console.error(`Failed to sync calendar for user ${user._id}:`, error);
